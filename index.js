@@ -1,7 +1,7 @@
 import Discord from "discord.js";
 import "dotenv/config";
 
-const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, ApplicationCommandType, ContextMenuCommandBuilder } = Discord;
+const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, ApplicationCommandType, ContextMenuCommandBuilder, EmbedBuilder } = Discord;
 
 const client = new Client({
   intents: [
@@ -125,7 +125,14 @@ client.on("messageCreate", async (message) => {
   try {
     const translated = await translateText(message.content, sourceLang, targetLang);
     const target = await client.channels.fetch(targetChannelId);
-    await target.send(`**${message.member.displayName}:** ${translated}`);
+    const embed = new EmbedBuilder()
+      .setAuthor({
+        name: message.member.displayName,
+        iconURL: message.author.displayAvatarURL()
+      })
+      .setDescription(translated)
+      .setColor(0x5865F2);
+    await target.send({ embeds: [embed] });
   } catch (e) {
     console.error("Translation error:", e);
   }
