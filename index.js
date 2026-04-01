@@ -52,13 +52,6 @@ const MENTION_REGEX = /<(@!?\d+|@&\d+|#\d+|a?:[a-zA-Z0-9_]+:\d+)>/g;
 async function callTranslation(text, sourceLang, targetLang) {
   const services = [
     async () => {
-      const url = `https://lingva.ml/api/v1/${sourceLang}/${targetLang}/${encodeURIComponent(text)}`;
-      const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
-      const data = await res.json();
-      if (!data.translation) throw new Error("Lingva: no result");
-      return data.translation;
-    },
-    async () => {
       const src = sourceLang === "auto" ? "auto" : sourceLang;
       const res = await fetch("https://translate.argosopentech.com/translate", {
         method: "POST",
@@ -69,6 +62,13 @@ async function callTranslation(text, sourceLang, targetLang) {
       const data = await res.json();
       if (!data.translatedText) throw new Error("LibreTranslate: no result");
       return data.translatedText;
+    },
+    async () => {
+      const url = `https://lingva.ml/api/v1/${sourceLang}/${targetLang}/${encodeURIComponent(text)}`;
+      const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      const data = await res.json();
+      if (!data.translation) throw new Error("Lingva: no result");
+      return data.translation;
     },
     async () => {
       const src = sourceLang === "auto" ? "autodetect" : sourceLang;
