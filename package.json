@@ -1,0 +1,14 @@
+{
+  "name": "discord-translate-bot",
+  "version": "1.0.0",
+  "description": "Discord channel translation bot",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.14.0",
+    "dotenv": "^16.3.1"
+  },
+  "type": "module"
+}
