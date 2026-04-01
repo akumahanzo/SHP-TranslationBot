@@ -47,67 +47,68 @@ const commands = [
     .setType(ApplicationCommandType.Message),
 ].map(cmd => cmd.toJSON());
 
-function extractMentions(text) {
-  const mentionRegex = /<(@!?\d+|@&\d+|#\d+|a?:[a-zA-Z0-9_]+:\d+)>/g;
-  const mentions = [];
-  const clean = text.replace(mentionRegex, (match) => {
-    const index = mentions.length;
-    mentions.push(match);
-    return `M${index}MENTION`;
-  });
-  return { clean, mentions };
-}
+const MENTION_REGEX = /<(@!?\d+|@&\d+|#\d+|a?:[a-zA-Z0-9_]+:\d+)>/g;
 
-function restoreMentions(text, mentions) {
-  return text.replace(/M(\d+)MENTION/g, (_, i) => mentions[parseInt(i)] ?? _);
-}
-
-async function tryMyMemory(text, sourceLang, targetLang) {
-  const src = sourceLang === "auto" ? "autodetect" : sourceLang;
-  const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${src}|${targetLang}`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
-  const data = await res.json();
-  if (data.responseStatus !== 200) throw new Error(`MyMemory: ${data.responseDetails}`);
-  return data.responseData.translatedText;
-}
-
-async function tryLibreTranslate(text, sourceLang, targetLang) {
-  const src = sourceLang === "auto" ? "auto" : sourceLang;
-  const res = await fetch("https://translate.argosopentech.com/translate", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ q: text, source: src, target: targetLang, format: "text" }),
-    signal: AbortSignal.timeout(8000)
-  });
-  const data = await res.json();
-  if (!data.translatedText) throw new Error("LibreTranslate: no result");
-  return data.translatedText;
-}
-
-async function tryLingva(text, sourceLang, targetLang) {
-  const url = `https://lingva.ml/api/v1/${sourceLang}/${targetLang}/${encodeURIComponent(text)}`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
-  const data = await res.json();
-  if (!data.translation) throw new Error("Lingva: no result");
-  return data.translation;
-}
-
-async function translateText(text, sourceLang, targetLang) {
-  const { clean, mentions } = extractMentions(text);
+async function callTranslation(text, sourceLang, targetLang) {
   const services = [
-    { name: "Lingva", fn: () => tryLingva(clean, sourceLang, targetLang) },
-    { name: "LibreTranslate", fn: () => tryLibreTranslate(clean, sourceLang, targetLang) },
-    { name: "MyMemory", fn: () => tryMyMemory(clean, sourceLang, targetLang) },
+    async () => {
+      const url = `https://lingva.ml/api/v1/${sourceLang}/${targetLang}/${encodeURIComponent(text)}`;
+      const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      const data = await res.json();
+      if (!data.translation) throw new Error("Lingva: no result");
+      return data.translation;
+    },
+    async () => {
+      const src = sourceLang === "auto" ? "auto" : sourceLang;
+      const res = await fetch("https://translate.argosopentech.com/translate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ q: text, source: src, target: targetLang, format: "text" }),
+        signal: AbortSignal.timeout(8000)
+      });
+      const data = await res.json();
+      if (!data.translatedText) throw new Error("LibreTranslate: no result");
+      return data.translatedText;
+    },
+    async () => {
+      const src = sourceLang === "auto" ? "autodetect" : sourceLang;
+      const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${src}|${targetLang}`;
+      const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      const data = await res.json();
+      if (data.responseStatus !== 200) throw new Error(`MyMemory: ${data.responseDetails}`);
+      return data.responseData.translatedText;
+    },
   ];
   for (const service of services) {
-    try {
-      const translated = await service.fn();
-      return restoreMentions(translated, mentions);
-    } catch (e) {
-      console.warn(`${service.name} failed, trying next:`, e.message);
+    try { return await service(); } catch (e) {
+      console.warn("Translation service failed, trying next:", e.message);
     }
   }
   throw new Error("All translation services failed.");
+}
+
+async function translateText(text, sourceLang, targetLang) {
+  const parts = [];
+  let lastIndex = 0;
+  for (const match of text.matchAll(MENTION_REGEX)) {
+    if (match.index > lastIndex) {
+      parts.push({ type: "text", value: text.slice(lastIndex, match.index) });
+    }
+    parts.push({ type: "mention", value: match[0] });
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < text.length) {
+    parts.push({ type: "text", value: text.slice(lastIndex) });
+  }
+
+  const translated = await Promise.all(parts.map(async (part) => {
+    if (part.type === "mention") return part.value;
+    const trimmed = part.value.trim();
+    if (!trimmed) return part.value;
+    return await callTranslation(trimmed, sourceLang, targetLang);
+  }));
+
+  return translated.join(" ").trim();
 }
 
 async function registerCommands(clientId) {
