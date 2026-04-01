@@ -112,11 +112,11 @@ client.on("messageCreate", async (message) => {
 
   if (message.channel.id === CHANNEL_A) {
     targetChannelId = CHANNEL_B;
-    sourceLang = "ar";
+    sourceLang = "auto";
     targetLang = "en";
   } else if (message.channel.id === CHANNEL_B) {
     targetChannelId = CHANNEL_A;
-    sourceLang = "en";
+    sourceLang = "auto";
     targetLang = "ar";
   } else {
     return;
